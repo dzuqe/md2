@@ -1,7 +1,7 @@
 // The table S given below is a permutation of 0...255 constructed
 // from the digits of pi.  It is a ``random'' nonlinear byte
 // substitution operation.
-static S: [u32; 256] = [
+static S: [u8; 256] = [
     41, 46, 67, 201, 162, 216, 124, 1, 61, 54, 84, 161, 236, 240, 6, 19,
     98, 167, 5, 243, 192, 199, 115, 140, 152, 147, 43, 217, 188, 76, 130, 202,
     30, 155, 87, 60, 253, 212, 224, 22, 103, 66, 111, 24, 138, 23, 229, 18,
@@ -24,18 +24,18 @@ static S: [u32; 256] = [
 /// computation; it holds the current "state" of a message digest
 /// computation
 pub struct MDContext {
-    pub D: Vec<u32>,     // buffer to store digest
-    pub C: Vec<u32>,     // checksum register
-    pub i: u32,          // number of bytes handled, modulo 16
-    pub L: u32,          // last checksum char saved
+    pub D: Vec<u8>,     // buffer to store digest
+    pub C: Vec<u8>,     // checksum register
+    pub i: u8,          // number of bytes handled, modulo 16
+    pub L: u8,          // last checksum char saved
 }
 
 impl MDContext {
     pub fn new() -> MDContext {
         let mut D = vec![0; 48];//: [u8; 48] = [0];
         let mut C = vec![0; 16];//: [u8; 16] = [0];
-        let i: u32 = 0;
-        let L: u32 = 0;
+        let i: u8 = 0;
+        let L: u8 = 0;
 
         for i in 0..16 {
             D[i] = 0;
@@ -49,29 +49,32 @@ impl MDContext {
     /// account for the presence of the character c in the message whose
     /// digest is being computed.  This routine will be called for each
     /// message byte in turn.
-    pub fn update(&mut self, c: u32) {
+    #[allow(arithmetic_overflow)]
+    pub fn update(&mut self, c: u8) {
         // add new byte to the buffer
         let mut i = self.i as usize;
         self.D[16+i] = c;
         self.D[32+i] = c ^ self.D[i];
 
         // update checksum and L
-        self.C[i] ^= S[0xff & ((c as usize) ^ (self.L as usize))];
+        self.C[i] ^= S[(0xff & (c ^ self.L)) as usize];
         self.L = self.C[i];
 
         // inc i by 1 modulo 16
         i = (i + 1) & 15;
-        self.i = i as u32;
+        self.i = i as u8;
 
         // transform D if i=0
         if i == 0 {
-            let mut t = 0;
+            let mut t: u8 = 0;
             for j in 0..18 {
-                for k in 0..48 {
-                    self.D[k] = self.D[k] ^ S[t];
-                    t = self.D[k] as usize;
+                for i in 0..48 {
+                    self.D[i] = self.D[i] ^ S[t as usize];
+                    t = self.D[i];
                 }
-                t = t + j;
+
+                println!("add T: {}, j: {}, t+j: {}", t, j as u8, t + (j as u8));
+                t = t + (j as u8);
             }
         }
     }
@@ -81,14 +84,12 @@ impl MDContext {
     pub fn finalize(&mut self) {
         let padlen = 16 - self.i;
         for _i in 0..padlen {
-            let x: u32 = padlen;
-            self.update(x);
+            self.update(padlen);
         }
 
         // extend with checksum
         for i in 0..16 {
-            let x: u32 = self.C[i];
-            self.update(x);
+            self.update(self.C[i]);
         }
     }
 
@@ -100,5 +101,4 @@ impl MDContext {
         println!("n-bytes, modulo 16 {:?}", self.i);
         println!("");
     }
-
 }
